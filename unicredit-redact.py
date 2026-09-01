@@ -12,10 +12,23 @@ if len(argv) < 2:
     exit()
 
 
+def extract_span_text(span):
+    return ''.join(char['c'] for char in span['chars'])
+
+
+def compute_substring_bounding_box(span_chars):
+    x0 = min(c['bbox'][0] for c in span_chars)
+    y0 = min(c['bbox'][1] for c in span_chars)
+    x1 = max(c['bbox'][2] for c in span_chars)
+    y1 = max(c['bbox'][3] for c in span_chars)
+
+    return (x0, y0, x1, y1)
+
+
 def block_idx_by_text(page_text, substr):
     return next(
         (i for i, e in enumerate(page_text) if any(
-            substr in span['text']
+            substr in extract_span_text(span)
             for line in e['lines']
             for span in line['spans'])
         ), -1
@@ -25,7 +38,7 @@ def block_idx_by_text(page_text, substr):
 def block_idx_by_regex(page_text, regex):
     return next(
         (i for i, e in enumerate(page_text) if any(
-            regex.search(span['text'])
+            regex.search(extract_span_text(span))
             for line in e['lines']
             for span in line['spans'])
         ), -1
@@ -87,31 +100,21 @@ def redact_spendings(page, page_text):
     account_activity_idx = block_idx_by_regex(page_text, SPENDING_PATTERN)
     for line in page_text[account_activity_idx]['lines']:
         for span in line['spans']:
-            text = span['text']
-            print(f'matchin {text}')
+            print(span)
+            print()
+            text = extract_span_text(span)
             if SPENDING_PATTERN.match(text):
                 # Mivel a '-' jelnek látszania kell, így az első karaktert nem takarjuk ki
-                sub_text = text[1:]
-                print(f'TALALT keressuk {sub_text}')
-                rects_to_redact = page.search_for(sub_text, clip=span['bbox'])
-                print(rects_to_redact)
-                if len(rects_to_redact) >= 1:
-                    page.add_redact_annot(rects_to_redact[0], fill=REDACTION_COLOR)
-            else:
-                print('NEM TALALT')
+                chars_to_redact = span['chars'][1:]
 
-        #print(line)
-        #print('\n')
-    #for txt in page_text:
-    #    print(txt)
-    #    print('\n')
+                page.add_redact_annot(compute_substring_bounding_box(chars_to_redact), fill=REDACTION_COLOR)
 
 
 with pymupdf.open(argv[1]) as doc:
     found_spendings = False
 
     for page in doc.pages():
-        page_text = [b for b in page.get_text(option='dict')['blocks'] if b['type'] == 0]
+        page_text = [b for b in page.get_text(option='rawdict')['blocks'] if b['type'] == 0]
 
         if not found_spendings:
             found_spendings = has_spendings(page_text)
@@ -122,7 +125,6 @@ with pymupdf.open(argv[1]) as doc:
         redact_initial_balance(page, page_text)
 
         if found_spendings:
-            print('MEGTALALTUK')
             redact_spendings(page, page_text)
 
         page.apply_redactions()
