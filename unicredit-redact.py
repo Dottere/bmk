@@ -5,10 +5,12 @@ from sys import argv, stderr
 import re
 
 REDACTION_COLOR = (0, 0, 0)
-SPENDING_PATTERN = re.compile(r'-[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}') # TODO jobb regex
+SPENDING_PATTERN = re.compile(r'-[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}') # TODO jobb regex talan
+MONTH_DAY_PATTERN = re.compile(r'[0-9]{2}\/[0-9]{2}')
+DATE_PATTERN = re.compile(r'[0-9]{4}\.[0-9]{2}\.[0-9]{2}')
 
-if len(argv) < 2:
-    print('Kell egy PDF file', file=stderr)
+if len(argv) < 3:
+    print('Használat: unicredit-redact.py [INPUT] [OUTPUT]', file=stderr)
     exit()
 
 
@@ -96,36 +98,48 @@ def has_spendings(page_text):
     return idx != -1
 
 
-def redact_spendings(page, page_text):
+def redact_spendings(page, page_text, spendings_start_idx, page_idx):
     account_activity_idx = block_idx_by_regex(page_text, SPENDING_PATTERN)
+    found_spendings_marker = False
+
+    # A dátumokat meghagyjuk, mert egyszer már így megfelelt
+    should_keep = lambda text: MONTH_DAY_PATTERN.match(text) or DATE_PATTERN.match(text) or text.isspace()
+
     for line in page_text[account_activity_idx]['lines']:
         for span in line['spans']:
-            print(span)
-            print()
+            #print(span)
+            #print()
             text = extract_span_text(span)
             if SPENDING_PATTERN.match(text):
                 # Mivel a '-' jelnek látszania kell, így az első karaktert nem takarjuk ki
                 chars_to_redact = span['chars'][1:]
 
                 page.add_redact_annot(compute_substring_bounding_box(chars_to_redact), fill=REDACTION_COLOR)
+            else:
+                # A 'Terhelések' szöveg után minden szöveget kitakarhatunk,
+                # de a dátumokat meghagyjuk, egyszer már így elfogadták
+                if (found_spendings_marker or page_idx > spendings_start_idx) and not should_keep(text):
+                    page.add_redact_annot(span['bbox'], fill=REDACTION_COLOR)
+                elif 'Terhelések' in text:
+                    found_spendings_marker = True
 
 
 with pymupdf.open(argv[1]) as doc:
-    found_spendings = False
+    spendings_start_page_idx = None
 
-    for page in doc.pages():
+    for page_idx, page in enumerate(doc.pages()):
         page_text = [b for b in page.get_text(option='rawdict')['blocks'] if b['type'] == 0]
 
-        if not found_spendings:
-            found_spendings = has_spendings(page_text)
+        if spendings_start_page_idx is None and has_spendings(page_text):
+            spendings_start_page_idx = page_idx
 
         footer_redact_sensitive_value(page, page_text, 'Terhelések összesen')
         footer_redact_sensitive_value(page, page_text, 'Záró egyenleg')
         redact_iban_and_account_numbers(page, page_text)
         redact_initial_balance(page, page_text)
 
-        if found_spendings:
-            redact_spendings(page, page_text)
+        if spendings_start_page_idx is not None:
+            redact_spendings(page, page_text, spendings_start_page_idx, page_idx)
 
         page.apply_redactions()
-    doc.save('lassuk.pdf')
+    doc.save(argv[2])
