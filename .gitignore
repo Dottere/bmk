@@ -1,1 +1,3 @@
 *.pdf
+mueper_redactor/__pycache__/
+mueper_redactor/__pycache__/*
