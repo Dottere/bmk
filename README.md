@@ -19,3 +19,8 @@ python3 -m bmk [Dokumentum] [kitakaró_folyamat] [kimenet]
 
 - Python 3.14
 - pymupdf
+
+
+## Licensz
+
+GPL
