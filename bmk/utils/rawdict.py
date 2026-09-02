@@ -1,0 +1,29 @@
+def extract_span_text(span):
+    return ''.join(char['c'] for char in span['chars'])
+
+def compute_substring_bounding_box(span_chars):
+    x0 = min(c['bbox'][0] for c in span_chars)
+    y0 = min(c['bbox'][1] for c in span_chars)
+    x1 = max(c['bbox'][2] for c in span_chars)
+    y1 = max(c['bbox'][3] for c in span_chars)
+
+    return (x0, y0, x1, y1)
+
+def block_idx_by_text(page_text, substr):
+    return next(
+        (i for i, e in enumerate(page_text) if any(
+            substr in extract_span_text(span)
+            for line in e['lines']
+            for span in line['spans'])
+        ), -1
+    )
+
+
+def block_idx_by_regex(page_text, regex):
+    return next(
+        (i for i, e in enumerate(page_text) if any(
+            regex.search(extract_span_text(span))
+            for line in e['lines']
+            for span in line['spans'])
+        ), -1
+    )

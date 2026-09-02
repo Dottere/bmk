@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 import re
 
 from .redactor import Redactor, TextExtractKind
+from .utils import rawdict as rd
 
 @dataclass
 class UnicreditRedactor(Redactor):
@@ -16,43 +17,10 @@ class UnicreditRedactor(Redactor):
 
         self.spendings_start_page_idx = -1
         
-
-    def extract_span_text(self, span):
-        return ''.join(char['c'] for char in span['chars'])
-    
-    
-    def compute_substring_bounding_box(self, span_chars):
-        x0 = min(c['bbox'][0] for c in span_chars)
-        y0 = min(c['bbox'][1] for c in span_chars)
-        x1 = max(c['bbox'][2] for c in span_chars)
-        y1 = max(c['bbox'][3] for c in span_chars)
-    
-        return (x0, y0, x1, y1)
-    
-    
-    def block_idx_by_text(self, page_text, substr):
-        return next(
-            (i for i, e in enumerate(page_text) if any(
-                substr in self.extract_span_text(span)
-                for line in e['lines']
-                for span in line['spans'])
-            ), -1
-        )
-    
-    
-    def block_idx_by_regex(self, page_text, regex):
-        return next(
-            (i for i, e in enumerate(page_text) if any(
-                regex.search(self.extract_span_text(span))
-                for line in e['lines']
-                for span in line['spans'])
-            ), -1
-        )
-    
     
     def footer_redact_sensitive_value(self, page, page_text, substr):
     
-        text_idx = self.block_idx_by_text(page_text, substr)
+        text_idx = rd.block_idx_by_text(page_text, substr)
         if text_idx is -1:
             return False
     
@@ -68,7 +36,7 @@ class UnicreditRedactor(Redactor):
 
 
     def redact_iban_and_account_numbers(self, page, page_text):
-        iban_and_account_idx = self.block_idx_by_text(page_text, 'IBAN')
+        iban_and_account_idx = rd.block_idx_by_text(page_text, 'IBAN')
         if iban_and_account_idx is -1:
             return False
     
@@ -84,7 +52,7 @@ class UnicreditRedactor(Redactor):
     
     
     def redact_initial_balance(self, page, page_text):
-        initial_balance_text_idx = self.block_idx_by_text(page_text, 'Nyitó egyenleg')
+        initial_balance_text_idx = rd.block_idx_by_text(page_text, 'Nyitó egyenleg')
         if initial_balance_text_idx is -1:
             return False
     
@@ -97,12 +65,12 @@ class UnicreditRedactor(Redactor):
     
     
     def has_spendings(self, page_text):
-        idx = self.block_idx_by_text(page_text, 'Terhelések')
+        idx = rd.block_idx_by_text(page_text, 'Terhelések')
         return idx != -1
     
     
     def redact_spendings(self, page, page_text, page_idx):
-        account_activity_idx = self.block_idx_by_regex(page_text, self.SPENDING_PATTERN)
+        account_activity_idx = rd.block_idx_by_regex(page_text, self.SPENDING_PATTERN)
         found_spendings_marker = False
     
         # A dátumokat meghagyjuk, mert egyszer már így megfelelt
@@ -110,12 +78,12 @@ class UnicreditRedactor(Redactor):
     
         for line in page_text[account_activity_idx]['lines']:
             for span in line['spans']:
-                text = self.extract_span_text(span)
+                text = rd.extract_span_text(span)
                 if self.SPENDING_PATTERN.match(text):
                     # Mivel a '-' jelnek látszania kell, így az első karaktert nem takarjuk ki
                     chars_to_redact = span['chars'][1:]
     
-                    page.add_redact_annot(self.compute_substring_bounding_box(chars_to_redact), fill=self.REDACTION_COLOR)
+                    page.add_redact_annot(rd.compute_substring_bounding_box(chars_to_redact), fill=self.REDACTION_COLOR)
                 else:
                     # A 'Terhelések' szöveg után minden szöveget kitakarhatunk,
                     # de a dátumokat meghagyjuk, egyszer már így elfogadták
