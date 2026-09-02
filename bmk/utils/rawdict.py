@@ -18,6 +18,14 @@ def block_idx_by_text(page_text, substr):
         ), -1
     )
 
+def line_idx_by_text(block, substr):
+    return next(
+        (i for i, line in enumerate(block['lines']) if any(
+            substr in extract_span_text(span)
+            for span in line['spans']
+        )), -1
+    )
+
 
 def block_idx_by_regex(page_text, regex):
     return next(

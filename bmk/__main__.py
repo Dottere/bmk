@@ -4,10 +4,12 @@ import argparse
 from sys import stderr
 
 from .unicredit_redactor import UnicreditRedactor
+from .otp_redactor import OtpRedactor
 from .redactor import Redactor
 
 ALL_REDACTORS: dict[str, type[Redactor]] = {
-    'unicredit': UnicreditRedactor
+    'unicredit': UnicreditRedactor,
+    'otp': OtpRedactor,
 }
 
 if __name__ == '__main__':

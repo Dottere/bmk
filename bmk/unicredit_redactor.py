@@ -1,19 +1,16 @@
 import pymupdf
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import re
 
 from .redactor import Redactor, TextExtractKind
 from .utils import rawdict as rd
+from .utils import regex as reg
 
 @dataclass
 class UnicreditRedactor(Redactor):
     def __post_init__(self):
         self.extract_kind = TextExtractKind.RAWDICT
-
-        self.SPENDING_PATTERN = re.compile(r'-[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}') # TODO jobb regex talan
-        self.MONTH_DAY_PATTERN = re.compile(r'[0-9]{2}\/[0-9]{2}')
-        self.DATE_PATTERN = re.compile(r'[0-9]{4}\.[0-9]{2}\.[0-9]{2}')
 
         self.spendings_start_page_idx = -1
         
@@ -70,16 +67,16 @@ class UnicreditRedactor(Redactor):
     
     
     def redact_spendings(self, page, page_text, page_idx):
-        account_activity_idx = rd.block_idx_by_regex(page_text, self.SPENDING_PATTERN)
+        account_activity_idx = rd.block_idx_by_regex(page_text, reg.SPENDING_PATTERN)
         found_spendings_marker = False
     
         # A dátumokat meghagyjuk, mert egyszer már így megfelelt
-        should_keep = lambda text: self.MONTH_DAY_PATTERN.match(text) or self.DATE_PATTERN.match(text) or text.isspace()
+        should_keep = lambda text: reg.MONTH_DAY_PATTERN.match(text) or reg.DATE_PATTERN.match(text) or text.isspace()
     
         for line in page_text[account_activity_idx]['lines']:
             for span in line['spans']:
                 text = rd.extract_span_text(span)
-                if self.SPENDING_PATTERN.match(text):
+                if reg.SPENDING_PATTERN.match(text):
                     # Mivel a '-' jelnek látszania kell, így az első karaktert nem takarjuk ki
                     chars_to_redact = span['chars'][1:]
     
