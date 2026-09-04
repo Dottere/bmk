@@ -232,25 +232,20 @@ class MbhOcrRedactor(Redactor):
                     y1 = span['bbox'][3]
 
                     if not redacting and abs(spending_y0s[spending_y0_idx] - y0) < SPENDING_TEXT_Y0_MAX_DIST:
-                        print(f'START {text}')
                         redacting = True
                         prev_y = y1
                         spending_y0_idx += 1
 
                         if not keep_text(text):
-                            #print(f'REDACT {text}')
                             orig_page.add_redact_annot(ocr.scale_bbox_to_orig(span['bbox'], scaling_matrix), fill=self.REDACTION_COLOR)
 
                     if (redacting and
                         (abs(prev_y - y0) < SPENDING_TEXT_Y0_MAX_DIST or
                          abs(prev_y - y1) < SPENDING_TEXT_Y0_MAX_DIST)):
                         if not keep_text(text):
-                            #print(f'REDACT {text}')
                             orig_page.add_redact_annot(ocr.scale_bbox_to_orig(span['bbox'], scaling_matrix), fill=self.REDACTION_COLOR)
                         prev_y = y1
                     else:
-                        if prev_y:
-                            print(f'NOPE {abs(prev_y - y0)}:\t{text}')
                         redacting = False
         
 
@@ -259,12 +254,6 @@ class MbhOcrRedactor(Redactor):
         scaling_matrix, scanned_doc = ocr.preprocess_scanned_page(page, 300, 20, 190)
         page_text = scanned_doc[0].get_text(option='rawdict')
         page_text = [b for b in page_text['blocks'] if b['type'] == 0]
-        #for bidx, block in enumerate(page_text):
-        #    for lidx, line in enumerate(block['lines']):
-        #        for sidx, span in enumerate(line['spans']):
-        #            text = rd.extract_span_text(span)
-        #            print(f'{bidx}:{lidx}:{sidx}:\t{text}')
-
 
         if not self.found_initial_balance:
             self.attempt_redacting_topmost_initial_balance(page, page_text, scaling_matrix)
