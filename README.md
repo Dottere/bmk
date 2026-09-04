@@ -20,6 +20,12 @@ python3 -m bmk [Dokumentum] [kitakaró_folyamat] [kimenet]
 - Python 3.14
 - pymupdf
 
+Ezen túl szkennelt dokumentumok feldolgozásához:
+
+- OpenCV
+- numpy
+- tesseract-data-hun
+
 
 ## Licensz
 
