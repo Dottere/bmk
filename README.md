@@ -14,6 +14,7 @@ python3 -m bmk [Dokumentum] [kitakaró_folyamat] [kimenet]
 |---|-------------------|
 |Unicredit elektronikus számlakivonat|`unicredit`|
 |OTP elektronikus számlakivonat|`otp`|
+|MBH szkennelt bankszámlakivonat|`mbh-ocr`|
 
 ## Függőségek
 
