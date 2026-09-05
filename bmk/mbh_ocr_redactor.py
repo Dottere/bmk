@@ -20,12 +20,23 @@ from .utils import regex as reg
 from .utils import ocr
 
 import re
+import os
+from concurrent.futures import ThreadPoolExecutor
 
 import pymupdf
 
 class MbhOcrRedactor(Redactor):
     def __init__(self, doc: pymupdf.Document, output_filename: str, extract_kind: TextExtractKind = TextExtractKind.RAWDICT) -> None:
         super().__init__(doc, output_filename, extract_kind)
+        self.ocr_data = []
+
+        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
+            n_pages = doc.page_count
+            dpi = [300] * n_pages
+            h = [20] * n_pages
+            threshold = [190] * n_pages
+            self.ocr_data = list(executor.map(ocr.preprocess_scanned_page, doc.pages(), dpi, h, threshold))
+
         # Vesszőre is matchelünk, ne bízzunk túlságosan a Tesseract-ban
         self.DUMB_BALANCE_PATTERN = re.compile(r'\d+[.,]\d')
         self.DUMB_ACCOUNT_NUMBER_PATTERN = re.compile(r'\-?\d{5,8}')
@@ -247,13 +258,37 @@ class MbhOcrRedactor(Redactor):
                         prev_y = y1
                     else:
                         redacting = False
-        
 
 
-    def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text) -> None:
+    def internal_process_page(self, page: pymupdf.Page, page_idx: int) -> None:
         scaling_matrix, scanned_doc = ocr.preprocess_scanned_page(page, 300, 20, 190)
         page_text = scanned_doc[0].get_text(option='rawdict')
         page_text = [b for b in page_text['blocks'] if b['type'] == 0]
+
+
+        if not self.found_initial_balance:
+            self.attempt_redacting_topmost_initial_balance(page, page_text, scaling_matrix)
+            self.attempt_redacting_topmost_total_spendings(page, page_text, scaling_matrix)
+            self.attempt_redacting_topmost_final_balance(page, page_text, scaling_matrix)
+            self.attempt_redacting_usable_amount(page, page_text, scaling_matrix)
+
+            self.found_initial_balance = True # TODO jobb név, ennek valójában maximum az első oldalon szabad futnia
+
+        self.redact_spending_amounts(page, page_text, scaling_matrix)
+
+        if page_idx > 0:
+            self.attempt_redacting_account_number(page, page_text, scaling_matrix)
+            self.attempt_redacting_bottommost_spending(page, page_text, scaling_matrix)
+
+
+        scanned_doc.close()
+
+
+    def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text) -> None:
+        scaling_matrix, scanned_doc = self.ocr_data[page_idx]
+        page_text = scanned_doc[0].get_text(option='rawdict')
+        page_text = [b for b in page_text['blocks'] if b['type'] == 0]
+
 
         if not self.found_initial_balance:
             self.attempt_redacting_topmost_initial_balance(page, page_text, scaling_matrix)

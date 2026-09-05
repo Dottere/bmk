@@ -51,6 +51,8 @@ class Redactor(ABC):
         for page_idx, page in enumerate(self.doc.pages()):
             page_text = page.get_text(self.extract_kind)
             self.process_page(page, page_idx, page_text)
+        self.postprocess()
+        for page in self.doc.pages():
             self.finalize_page(page)
 
     @final
@@ -64,6 +66,5 @@ class Redactor(ABC):
     @final
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if exc_type is None:
-            self.postprocess()
             self.doc.save(self.output_filename)
         self.doc.close()
