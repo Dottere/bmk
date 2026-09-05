@@ -38,6 +38,13 @@ class Redactor(ABC):
     @abstractmethod
     def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text) -> None:
         """Az öröklő osztály definiálja, hogy milyen módon dolgozza fel a PDF oldalakat (layout függő)"""
+        pass
+
+    def postprocess(self):
+        """
+        Ebben futtathatunk kódot a `process_page` hívások után
+        """
+        pass
 
     @final
     def process_pages(self) -> None:
@@ -57,5 +64,6 @@ class Redactor(ABC):
     @final
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
         if exc_type is None:
+            self.postprocess()
             self.doc.save(self.output_filename)
         self.doc.close()
