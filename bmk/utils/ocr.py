@@ -50,3 +50,13 @@ def preprocess_scanned_page(scanned: pymupdf.Page, dpi: int = 300, denoise_h: in
     scaling_matrix = new_doc[0].rect.torect(scanned.rect)
 
     return scaling_matrix, new_doc
+
+
+def process_worker(filename, pagenum, dpi, h, threshold):
+    with pymupdf.open(filename) as doc:
+        sm, scanned_doc = preprocess_scanned_page(doc[pagenum], dpi, h, threshold)
+        page_text = scanned_doc[0].get_text(option='rawdict')
+        page_text = [b for b in page_text['blocks'] if b['type'] == 0]
+        # Python tuple-t tudunk folyamatok között küldeni
+        pickleable_matrix = (sm.a, sm.b, sm.c, sm.d, sm.e, sm.f)
+        return pickleable_matrix, page_text

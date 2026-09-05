@@ -21,21 +21,32 @@ from .utils import ocr
 
 import re
 import os
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 import pymupdf
+
+
+#def run_ocr(filename, pagenum, dpi, h, threshold):
+#    with pymupdf.open(filename) as doc:
+#        sm, scanned_doc = ocr.preprocess_scanned_page(doc[pagenum], dpi, h, threshold)
+#        page_text = scanned_doc[0].get_text(option='rawdict')
+#        page_text = [b for b in page_text['blocks'] if b['type'] == 0]
+#        # Python tuple-t tudunk folyamatok között küldeni
+#        pickleable_matrix = (sm.a, sm.b, sm.c, sm.d, sm.e, sm.f)
+#        return pickleable_matrix, page_text
 
 class MbhOcrRedactor(Redactor):
     def __init__(self, doc: pymupdf.Document, output_filename: str, extract_kind: TextExtractKind = TextExtractKind.RAWDICT) -> None:
         super().__init__(doc, output_filename, extract_kind)
         self.ocr_data = []
 
-        with ThreadPoolExecutor(max_workers=os.cpu_count()) as executor:
-            n_pages = doc.page_count
-            dpi = [300] * n_pages
-            h = [20] * n_pages
-            threshold = [190] * n_pages
-            self.ocr_data = list(executor.map(ocr.preprocess_scanned_page, doc.pages(), dpi, h, threshold))
+        with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+            doc_names = [doc.name] * doc.page_count
+            page_nums = list(range(doc.page_count))
+            dpi = [300] * doc.page_count
+            h = [20] * doc.page_count
+            threshold = [190] * doc.page_count
+            self.ocr_data = list(executor.map(ocr.process_worker, doc_names, page_nums, dpi, h, threshold))
 
         # Vesszőre is matchelünk, ne bízzunk túlságosan a Tesseract-ban
         self.DUMB_BALANCE_PATTERN = re.compile(r'\d+[.,]\d')
@@ -285,10 +296,8 @@ class MbhOcrRedactor(Redactor):
 
 
     def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text) -> None:
-        scaling_matrix, scanned_doc = self.ocr_data[page_idx]
-        page_text = scanned_doc[0].get_text(option='rawdict')
-        page_text = [b for b in page_text['blocks'] if b['type'] == 0]
-
+        scaling_matrix, page_text = self.ocr_data[page_idx]
+        scaling_matrix = pymupdf.Matrix(scaling_matrix) # visszaalakítjuk pymupdf Mátrixxá
 
         if not self.found_initial_balance:
             self.attempt_redacting_topmost_initial_balance(page, page_text, scaling_matrix)
@@ -303,6 +312,3 @@ class MbhOcrRedactor(Redactor):
         if page_idx > 0:
             self.attempt_redacting_account_number(page, page_text, scaling_matrix)
             self.attempt_redacting_bottommost_spending(page, page_text, scaling_matrix)
-
-
-        scanned_doc.close()
