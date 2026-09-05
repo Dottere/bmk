@@ -219,7 +219,7 @@ class MbhOcrRedactor(Redactor):
         if not text_x1:
             return
 
-        SPENDING_TEXT_Y0_MAX_DIST = 35
+        SPENDING_TEXT_Y0_MAX_DIST = 25
         spending_y0s = []
 
         for block in ocr_page_text[indicator:]:
@@ -240,7 +240,9 @@ class MbhOcrRedactor(Redactor):
         spending_y0_idx = 0
         redacting = False
 
-        keep_text = lambda text: not text or reg.DATE_PATTERN.match(text)
+        keep_text = lambda text: (not text or
+                                  reg.DATE_PATTERN.match(text)
+                                  or self.DUMB_BALANCE_PATTERN.match(text))
 
         # TODO JAVITANI
         for block in ocr_page_text[indicator:]:
@@ -269,30 +271,6 @@ class MbhOcrRedactor(Redactor):
                         prev_y = y1
                     else:
                         redacting = False
-
-
-    def internal_process_page(self, page: pymupdf.Page, page_idx: int) -> None:
-        scaling_matrix, scanned_doc = ocr.preprocess_scanned_page(page, 300, 20, 190)
-        page_text = scanned_doc[0].get_text(option='rawdict')
-        page_text = [b for b in page_text['blocks'] if b['type'] == 0]
-
-
-        if not self.found_initial_balance:
-            self.attempt_redacting_topmost_initial_balance(page, page_text, scaling_matrix)
-            self.attempt_redacting_topmost_total_spendings(page, page_text, scaling_matrix)
-            self.attempt_redacting_topmost_final_balance(page, page_text, scaling_matrix)
-            self.attempt_redacting_usable_amount(page, page_text, scaling_matrix)
-
-            self.found_initial_balance = True # TODO jobb név, ennek valójában maximum az első oldalon szabad futnia
-
-        self.redact_spending_amounts(page, page_text, scaling_matrix)
-
-        if page_idx > 0:
-            self.attempt_redacting_account_number(page, page_text, scaling_matrix)
-            self.attempt_redacting_bottommost_spending(page, page_text, scaling_matrix)
-
-
-        scanned_doc.close()
 
 
     def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text) -> None:

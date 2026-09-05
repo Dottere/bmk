@@ -30,7 +30,6 @@ def preprocess_scanned_page(scanned: pymupdf.Page, dpi: int = 300, denoise_h: in
     és egy 1 oldalas dokumentum
     '''
     pixmap = scanned.get_pixmap(dpi=dpi)
-    #img = np.frombuffer(pixmap.samples, dtype=np.uint8).reshape(pixmap.h, pixmap.w, pixmap.n)
     img = np.ndarray(
         shape=(pixmap.h, pixmap.w, pixmap.n),
         dtype=np.uint8,
