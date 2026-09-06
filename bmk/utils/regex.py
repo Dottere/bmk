@@ -11,11 +11,11 @@ FITNESS FOR A PARTICULAR PURPOSE.
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with bmk.
-If not, see <https://www.gnu.org/licenses/>. 
+If not, see <https://www.gnu.org/licenses/>.
 '''
 
 import re
 
-SPENDING_PATTERN = re.compile(r'\-[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}') # TODO jobb regex talan
-MONTH_DAY_PATTERN = re.compile(r'[0-9]{2}\/[0-9]{2}')
-DATE_PATTERN = re.compile(r'[0-9]{4}\.[0-9]{2}\.[0-9]{2}')
+SPENDING_PATTERN: re.Pattern = re.compile(r'\-[0-9]{1,3}(?:\.[0-9]{3})*,\d{2}') # TODO jobb regex talan
+MONTH_DAY_PATTERN: re.Pattern = re.compile(r'[0-9]{2}\/[0-9]{2}')
+DATE_PATTERN: re.Pattern = re.compile(r'[0-9]{4}\.[0-9]{2}\.[0-9]{2}')
