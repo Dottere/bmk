@@ -24,7 +24,12 @@ import pymupdf
 mymupdf.Page.get_text() `option` paraméterét szabja meg,
 a `process_page` `text_page` paramétere kapja a feldolgozott szöveget
 """
-TextExtractKind = StrEnum('TextExtractKind', [('TEXT', 'text'), ('BLOCKS', 'blocks'), ('DICT', 'dict'), ('RAWDICT', 'rawdict')])
+TextExtractKind = StrEnum('TextExtractKind', [
+    ('TEXT', 'text'),
+    ('BLOCKS', 'blocks'),
+    ('DICT', 'dict'),
+    ('RAWDICT', 'rawdict'),
+    ('WORDS','words')])
 
 class Redactor(ABC):
 
@@ -66,3 +71,10 @@ class Redactor(ABC):
         if exc_type is None:
             self.doc.save(self.output_filename)
         self.doc.close()
+
+    def __str__(self):
+        return f"Redactor class for pdf files. This specific redactor class was initialized with:"\
+               f"\n|-----> Derived class used={self.__class__}"\
+               f"\n|-----> The document to process={self.doc.name}"\
+               f"\n|-----> Name of the output file={self.output_filename}"\
+               f"\n|-----> Extraction strategy used={self.extract_kind}"

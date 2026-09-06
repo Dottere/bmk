@@ -15,56 +15,24 @@ If not, see <https://www.gnu.org/licenses/>.
 '''
 
 import re
-from typing import Any
 
 import pymupdf
 
 from .redactor import Redactor, TextExtractKind
+from .utils.rawdict import Word, find_numbers_next_to_text
+from .utils.regex import ERSTE_SPENDING_PATTERN
 
 
 class ErsteRedactor(Redactor):
-    def __init__(self, doc: pymupdf.Document, output_filename: str, extract_kind: TextExtractKind = TextExtractKind.RAWDICT) -> None:
+    def __init__(self, doc: pymupdf.Document, output_filename: str, extract_kind: TextExtractKind = TextExtractKind.WORDS) -> None:
         super().__init__(doc, output_filename, extract_kind)
 
         self.redacted_initial_balance: bool = False
-        self.ERSTE_SPENDING_PATTERN: re.Pattern = re.compile(r'^(-)?(\d+(?:\.\d+)?(?:,\d+)?)$')
-        self.ERSTE_DATE_PATTERN: re.Pattern = re.compile(r'\d{4}\.\d{2}\.\d{2}')
 
         self.prev_tx_was_negative: bool = False # tx = transaction
         self.saved_col_x_min: float | None = None
         self.saved_col_x_max: float | None = None
         self.saved_header_x0: float | None = None
-
-    def _find_numbers_next_to_text(self, page: pymupdf.Page, label_text: str) -> list[tuple[float, float, float, float, str]] | None:
-        label_rects = page.search_for(label_text)
-        if not label_rects:
-            return None
-
-        label_rect = label_rects[0]
-        y_min = label_rect.y0 - 2
-        y_max = label_rect.y1 + 2
-        x_start = label_rect.x1
-
-        words = page.get_text("words")
-        words_in_line: list = []
-
-        for word in words:
-            w_x0, w_y0, _, w_y1, _ = word[:5]
-            w_y_center: float = float(w_y0 + w_y1) / 2.0
-
-            if (y_min <= w_y_center <= y_max) and (w_x0 >= x_start):
-                words_in_line.append(word[:5])
-
-        if not words_in_line:
-            return None
-
-        words_in_line = sorted(words_in_line, key=lambda w: w[0])
-        fitting_words_in_line = [
-            word_data for word_data in words_in_line
-            if re.match(self.ERSTE_SPENDING_PATTERN, word_data[4])
-        ]
-
-        return fitting_words_in_line if fitting_words_in_line else None
 
     def redact_account_number(self, page: pymupdf.Page) -> None:
         labels_to_redact = [
@@ -85,7 +53,7 @@ class ErsteRedactor(Redactor):
                 bbox = pymupdf.Rect(rect.x1 + 5, rect.y0, end_x, rect.y1)
                 page.add_redact_annot(bbox, fill=self.REDACTION_COLOR)
 
-    def redact_opening_balance(self, page: pymupdf.Page) -> None:
+    def redact_opening_balance(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         opening_rects = page.search_for("Nyitó egyenleg")
         balance_rects = page.search_for("Egyenleg")
 
@@ -100,20 +68,20 @@ class ErsteRedactor(Redactor):
         y_search_top = opening_rect.y1
         y_search_bottom = opening_rect.y1 + 30
 
-        words = page.get_text("words")
 
-        for word in words:
+
+        for word in page_text:
             w_x0, w_y0, _, w_y1, text = word[:5]
             w_y_center: float = float(w_y0 + w_y1) / 2.0
 
             in_same_column: bool = (col_x_min <= w_x0 <= col_x_max)
             in_same_row: bool = (y_search_top <= w_y_center <= y_search_bottom)
 
-            if in_same_column and in_same_row and re.match(self.ERSTE_SPENDING_PATTERN, text):
+            if in_same_column and in_same_row and re.match(ERSTE_SPENDING_PATTERN, text):
                     page.add_redact_annot(pymupdf.Rect(word[:4]), fill=self.REDACTION_COLOR)
                     break
 
-    def redact_balances(self, page: pymupdf.Page) -> None:
+    def redact_balances(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         column_rules = {
             "Összeg(+/-)": "negative_only",
             "Egyenleg": "all",
@@ -131,10 +99,8 @@ class ErsteRedactor(Redactor):
                 y_min = header_rect.y1
                 columns.append((x_min, x_max, y_min, rule))
 
-        words = page.get_text("words")
-
-        for word_info in words:
-            w_x0, w_y0, w_x1, w_y1, text = word_info[:5]
+        for word in page_text:
+            w_x0, w_y0, w_x1, w_y1, text = word[:5]
 
             matched_rule = None
             for (col_x_min, col_x_max, col_y_min, rule) in columns:
@@ -150,7 +116,7 @@ class ErsteRedactor(Redactor):
                         page.add_redact_annot(word_bbox, fill=self.REDACTION_COLOR)
                     continue
 
-                match = re.match(self.ERSTE_SPENDING_PATTERN, text)
+                match = re.match(ERSTE_SPENDING_PATTERN, text)
                 if match:
                     has_minus = bool(match.group(1))
 
@@ -162,7 +128,7 @@ class ErsteRedactor(Redactor):
                     for rect in number_rects:
                         page.add_redact_annot(rect, fill=self.REDACTION_COLOR)
 
-    def redact_reference_data_if_negative(self, page: pymupdf.Page) -> None:
+    def redact_reference_data_if_negative(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         prev_is_neg = self.prev_tx_was_negative
         amount_rects = page.search_for("Összeg(+/-)")
 
@@ -188,12 +154,11 @@ class ErsteRedactor(Redactor):
         ghost_right_limit = safe_header_x0 - 5
 
         transactions = []
-        words = page.get_text("words")
 
-        for word in words:
+        for word in page_text:
             w_x0, w_y0, w_x1, w_y1, text = word[:5]
             if float(w_x0) >= col_x_min and float(w_x1) <= col_x_max and float(w_y0) >= header_y:
-                match = re.match(self.ERSTE_SPENDING_PATTERN, text)
+                match = re.match(ERSTE_SPENDING_PATTERN, text)
                 if match:
                     transactions.append({
                         'y0': w_y0,
@@ -263,7 +228,7 @@ class ErsteRedactor(Redactor):
 
                 if parent_block and parent_block['is_neg']:
                     max_x: float = -1.0
-                    for word in words:
+                    for word in page_text:
                         w_x0, w_y0, w_x1, w_y1 = word[:4]
                         w_y_center = float(w_y0 + w_y1) / 2.0
 
@@ -276,14 +241,14 @@ class ErsteRedactor(Redactor):
                         redact_area = pymupdf.Rect(rect.x1 + 3, rect.y0 - 2, max_x + 3, rect.y1 + 2)
                         page.add_redact_annot(redact_area, fill=self.REDACTION_COLOR)
 
-    def redact_misc_numbers(self, page: pymupdf.Page) -> None:
+    def redact_misc_numbers(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         labels_for_numbers_accounted_for = [
             "Záró egyenleg", "Összes terhelés", "LAKOSSÁGI FOLYÓSZÁMLAHITEL",
             "Összesen", "Felhasználható egyenleg"
         ]
 
         for label in labels_for_numbers_accounted_for:
-            words = self._find_numbers_next_to_text(page, label)
+            words = find_numbers_next_to_text(page, label, page_text, regex=ERSTE_SPENDING_PATTERN)
             if not words:
                 continue
 
@@ -291,7 +256,7 @@ class ErsteRedactor(Redactor):
                 redact_area = pymupdf.Rect(word[:4])
                 page.add_redact_annot(redact_area, fill=self.REDACTION_COLOR)
 
-    def redact_pending_card_transactions(self, page: pymupdf.Page) -> None:
+    def redact_pending_card_transactions(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         info_rects = page.search_for("Részletező információk")
         amount_rects = page.search_for("Zárolt összeg")
 
@@ -310,9 +275,9 @@ class ErsteRedactor(Redactor):
         if summary_rects:
             y_bottom = summary_rects[0].y0 - 5
 
-        words = page.get_text("words")
 
-        for word in words:
+
+        for word in page_text:
             w_x0, w_y0, w_x1, w_y1 = word[:4]
             w_x_center = float(w_x0 + w_x1) / 2.0
             w_y_center = float(w_y0 + w_y1) / 2.0
@@ -320,10 +285,9 @@ class ErsteRedactor(Redactor):
             if (col_x_min <= w_x_center <= col_x_max) and (y_top <= w_y_center <= y_bottom):
                 page.add_redact_annot(pymupdf.Rect(word[:4]), fill=self.REDACTION_COLOR)
 
-    def redact_technical_artifacts(self, page: pymupdf.Page) -> None:
+    def redact_technical_artifacts(self, page: pymupdf.Page, page_text: list[Word]) -> None:
         """Eltávolítja a margókon lévő technikai AFP metaadatokat."""
-        words = page.get_text("words")
-        for word in words:
+        for word in page_text:
             w_x0, _, _, _, text = word[:5]
             artifact_found: bool = ".afp" in text.lower() or ("_" in text and len(text) > 20 and any(char.isdigit() for char in text))
             artifact_close_to_margin: bool = float(w_x0) < 50.0 or w_x0 > page.rect.width - 150
@@ -332,11 +296,11 @@ class ErsteRedactor(Redactor):
 
 
 
-    def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text: dict[str, Any]) -> None:
+    def process_page(self, page: pymupdf.Page, page_idx: int, extracted_text: list[Word]) -> None:
         self.redact_account_number(page)
-        self.redact_opening_balance(page)
-        self.redact_balances(page)
-        self.redact_reference_data_if_negative(page)
-        self.redact_misc_numbers(page)
-        self.redact_pending_card_transactions(page)
-        self.redact_technical_artifacts(page)
+        self.redact_opening_balance(page, extracted_text)
+        self.redact_balances(page, extracted_text)
+        self.redact_reference_data_if_negative(page, extracted_text)
+        self.redact_misc_numbers(page, extracted_text)
+        self.redact_pending_card_transactions(page, extracted_text)
+        self.redact_technical_artifacts(page, extracted_text)
